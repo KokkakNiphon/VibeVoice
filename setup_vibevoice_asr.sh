@@ -109,6 +109,32 @@ setup_uv() {
     print_status "uv version: $(uv --version)"
 }
 
+# Install flash-attention from prebuilt wheels
+install_flash_attention() {
+    print_status "Installing flash-attention from prebuilt wheels..."
+    
+    # Detect versions
+    PYTHON_VERSION=$(python -c "import sys; print(f'{sys.version_info.major}{sys.version_info.minor}')")
+    CUDA_VERSION=$(python -c "import torch; print(torch.version.cuda.replace('.', ''))" 2>/dev/null || echo "121")
+    TORCH_VERSION=$(python -c "import torch; print(f'{torch.__version__.split(\"+\")[0].split(\".\")[0]}.{torch.__version__.split(\"+\")[0].split(\".\")[1]}')" 2>/dev/null || echo "2.5")
+    
+    print_status "Detected: Python ${PYTHON_VERSION}, CUDA ${CUDA_VERSION}, PyTorch ${TORCH_VERSION}"
+    
+    # Use prebuilt wheel from GitHub releases
+    FLASH_ATTN_VERSION="2.7.4.post1"
+    WHEEL_URL="https://github.com/Dao-AILab/flash-attention/releases/download/v${FLASH_ATTN_VERSION}/flash_attn-${FLASH_ATTN_VERSION}+cu${CUDA_VERSION}torch${TORCH_VERSION}cxx11abiFALSE-cp${PYTHON_VERSION}-cp${PYTHON_VERSION}-linux_x86_64.whl"
+    
+    print_status "Downloading prebuilt wheel: ${WHEEL_URL}"
+    uv pip install "${WHEEL_URL}" || {
+        print_error "Failed to install flash-attention from prebuilt wheel."
+        print_error "Please check if a compatible wheel exists at: https://github.com/Dao-AILab/flash-attention/releases"
+        print_error "Your system: Python ${PYTHON_VERSION}, CUDA ${CUDA_VERSION}, PyTorch ${TORCH_VERSION}"
+        exit 1
+    }
+    
+    print_status "Flash-attention installed successfully from prebuilt wheel"
+}
+
 # Create virtual environment and install dependencies
 setup_venv() {
     print_status "Creating virtual environment..."
@@ -124,17 +150,11 @@ setup_venv() {
     print_status "Installing VibeVoice-ASR..."
     uv pip install -e .
     
-    # Install flash-attention if not available
-    print_status "Checking for flash-attention..."
+    # Install flash-attention from prebuilt wheels (required, no fallback)
     if ! python -c 'import flash_attn' 2>/dev/null; then
-        print_warning "Flash attention not found. Installing..."
-        print_warning "This may take several minutes..."
-        uv pip install flash-attn --no-build-isolation || {
-            print_warning "Failed to install flash-attn. Model will work but may be slower."
-            print_warning "Refer to: https://github.com/Dao-AILab/flash-attention for manual installation"
-        }
+        install_flash_attention
     else
-        print_status "Flash attention is available"
+        print_status "Flash attention is already available"
     fi
 }
 
